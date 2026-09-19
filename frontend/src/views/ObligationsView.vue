@@ -16,22 +16,9 @@
           <el-col :span="12">
             <el-form-item label="收款方">
               <el-select v-model="form.payeeMemberId" filterable style="width:100%" :disabled="!auth.isOperator">
-                <!-- BUG: payee list includes suspended members to match backend bypass -->
-                <el-option
-                  v-for="m in members"
-                  :key="m.memberId"
-                  :label="m.status === 'SUSPENDED' ? `${m.name}（停用）` : m.name"
-                  :value="m.memberId"
-                />
+                <el-option v-for="m in activeMembers" :key="m.memberId" :label="m.name" :value="m.memberId" />
               </el-select>
             </el-form-item>
-            <el-alert
-              v-if="payeeHint"
-              style="margin:0 0 12px"
-              type="warning"
-              :closable="false"
-              :title="payeeHint"
-            />
           </el-col>
           <el-col :span="8">
             <el-form-item label="币种">
@@ -123,14 +110,6 @@ const filters = reactive({
   status: 'OPEN'
 })
 
-const payeeHint = computed(() => {
-  const m = members.value.find((x) => x.memberId === form.payeeMemberId)
-  if (m && m.status === 'SUSPENDED') {
-    return '已选停用收款方：当前后端可能仍允许保存（临时）'
-  }
-  return ''
-})
-
 const activeMembers = computed(() => members.value.filter((m) => m.status === 'ACTIVE'))
 const memberMap = computed(() => Object.fromEntries(members.value.map((m) => [m.memberId, m.name])))
 
@@ -158,6 +137,16 @@ async function load() {
 }
 
 async function create() {
+  const payer = members.value.find((m) => m.memberId === form.payerMemberId)
+  const payee = members.value.find((m) => m.memberId === form.payeeMemberId)
+  if (!payer || payer.status !== 'ACTIVE') {
+    ElMessage.warning('付款方不可用（不存在或已停用），请重新选择')
+    return
+  }
+  if (!payee || payee.status !== 'ACTIVE') {
+    ElMessage.warning('收款方不可用（不存在或已停用），请重新选择')
+    return
+  }
   saving.value = true
   try {
     await api.post('/obligations', { ...form })

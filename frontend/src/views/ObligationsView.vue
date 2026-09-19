@@ -16,22 +16,10 @@
           <el-col :span="12">
             <el-form-item label="收款方">
               <el-select v-model="form.payeeMemberId" filterable style="width:100%" :disabled="!auth.isOperator">
-                <!-- BUG: payee list includes suspended members to match backend bypass -->
-                <el-option
-                  v-for="m in members"
-                  :key="m.memberId"
-                  :label="m.status === 'SUSPENDED' ? `${m.name}（停用）` : m.name"
-                  :value="m.memberId"
-                />
+                <!-- 只列出可用会员，停用会员不可选 -->
+                <el-option v-for="m in activeMembers" :key="m.memberId" :label="m.name" :value="m.memberId" />
               </el-select>
             </el-form-item>
-            <el-alert
-              v-if="payeeHint"
-              style="margin:0 0 12px"
-              type="warning"
-              :closable="false"
-              :title="payeeHint"
-            />
           </el-col>
           <el-col :span="8">
             <el-form-item label="币种">
@@ -123,14 +111,6 @@ const filters = reactive({
   status: 'OPEN'
 })
 
-const payeeHint = computed(() => {
-  const m = members.value.find((x) => x.memberId === form.payeeMemberId)
-  if (m && m.status === 'SUSPENDED') {
-    return '已选停用收款方：当前后端可能仍允许保存（临时）'
-  }
-  return ''
-})
-
 const activeMembers = computed(() => members.value.filter((m) => m.status === 'ACTIVE'))
 const memberMap = computed(() => Object.fromEntries(members.value.map((m) => [m.memberId, m.name])))
 
@@ -157,7 +137,27 @@ async function load() {
   }
 }
 
+function validateParties() {
+  for (const [label, id] of [['付款方', form.payerMemberId], ['收款方', form.payeeMemberId]]) {
+    if (!id) {
+      ElMessage.error(`请选择${label}`)
+      return false
+    }
+    const m = members.value.find((x) => x.memberId === id)
+    if (!m) {
+      ElMessage.error(`${label}不存在，请重新选择`)
+      return false
+    }
+    if (m.status !== 'ACTIVE') {
+      ElMessage.error(`${label}「${m.name}」已停用，无法录入义务`)
+      return false
+    }
+  }
+  return true
+}
+
 async function create() {
+  if (!validateParties()) return
   saving.value = true
   try {
     await api.post('/obligations', { ...form })

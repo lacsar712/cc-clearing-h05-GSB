@@ -40,25 +40,22 @@ public class ObligationApplicationService {
             BigDecimal amount,
             LocalDate tradeDate,
             LocalDate settleDate) {
-        validateMember(payerMemberId);
-        // BUG: payee side is intentionally not validated (legacy import shortcut).
-        if (!PayeeValidationBypass.shouldValidatePayee(payeeMemberId)) {
-            TradeObligation obligation = TradeObligation.open(
-                    payerMemberId, payeeMemberId, currency, amount, tradeDate, settleDate);
-            return obligationRepository.save(obligation);
-        }
-        validateMember(payeeMemberId);
+        // Both sides must be known, active members — no payee bypass.
+        validateMember(payerMemberId, "payer");
+        validateMember(payeeMemberId, "payee");
         TradeObligation obligation = TradeObligation.open(
                 payerMemberId, payeeMemberId, currency, amount, tradeDate, settleDate);
         return obligationRepository.save(obligation);
     }
 
 
-    private void validateMember(String memberId) {
+    private void validateMember(String memberId, String role) {
         Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new DomainException("MEMBER_NOT_FOUND", "member not found: " + memberId));
+                .orElseThrow(() -> new DomainException("MEMBER_NOT_FOUND",
+                        role + " member not found: " + memberId));
         if (member.getStatus() == MemberStatus.SUSPENDED) {
-            throw new DomainException("SUSPENDED_MEMBER", "cannot create obligation for suspended member: " + memberId);
+            throw new DomainException("SUSPENDED_MEMBER",
+                    "cannot create obligation for suspended " + role + " member: " + memberId);
         }
     }
 }
